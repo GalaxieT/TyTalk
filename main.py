@@ -1,7 +1,12 @@
 """
-当前版本号： 0.6.2
+当前版本号： 0.6.3 （未发布）
 本版本更新内容：
-    改变了拼音修正的顺序
+    更新了拼音改变的规则（得）
+    修改了一些参数的值
+    调整了等待qps的时间
+    bugs:
+        末尾有空字符导致baidu parser输出错误
+        分词错误将符号分到别的词最后，混淆了节奏的短语识别系统（二次修复）
 
 叹号问号等
     问号（疑问句）目的语气 √
@@ -47,9 +52,11 @@ vsqx字间连接性
     鼻音声母
     鼻音韵母
     其他声母时长增加以增强特征性和连续性
+    解决vel导致的声音提前发出，从而使得参数变化不同步的问题
 英文支持
 手动调节各层级属性（如声调修正等）
 vsqx音量均衡化
+多说话人支持
 方法：专家规则，之后考虑机器学习
 """
 try:
@@ -129,6 +136,7 @@ class Talker:
             r'[^0-9\u4e00-\u9fa5.， ,\-。；%《*》/•、&＆(—)（+）…：？!！“”·\n]+')  # https://www.jianshu.com/p/ebc46dc9c2ee
         text = fil.sub('', text)
         text = re.sub('\n+', '\n', text)
+        text = re.sub('[ \n]+$', '', text)
         print('共{}字，开始处理...'.format(len(text)))
         self.text = text
         self.mark(parser)
@@ -180,7 +188,7 @@ class Talker:
                     no = 0
                     for ch in p[0]:
                         no += 1
-                        parse_marks.append((no, ln, p[1], word_key))
+                        parse_marks.append((no, ln, p[1], word_key, ch))
                     words.append(p[0])
                     word_key += 1
         else:
@@ -255,8 +263,8 @@ class Talker:
                                 r = client().lexer(word_seg)
                                 flag = r['items'][-1]['pos']
                             except KeyError:
-                                sleep(0.5)
-                                print('等待QPS，延时0.5秒...')
+                                sleep(0.6)
+                                print('等待QPS，延时0.6秒...')
                                 try:
                                     r = client().lexer(word_seg)
                                     flag = r['items'][-1]['pos']
@@ -307,7 +315,7 @@ class Talker:
                         modify.append((i_w + chr_index, 'zhong4', None))
                 if chrc == '得':
                     flag = parse_marks[i_w+chr_index][2]
-                    if flag == 'u':
+                    if flag in ('u', 'ud'):
                         modify.append((i_w + chr_index, 'de', None))
                 if chrc == '处' and len(word) <= 2:
                     flag = parse_marks[i_w + chr_index][2]
@@ -333,7 +341,7 @@ class Talker:
             if mod[2]:
                 if text[mod[0]+1:] and text[mod[0]+1] == '儿':
                     er_inf[mod[0]] = True
-                    del_list.append(mod[0])
+                    del_list.append(mod[0]+1)
                 else:
                     print('有儿化规则失效')
                 if mod[2] == False:  # 用于取消儿化，与None 相区别
@@ -394,8 +402,8 @@ class Talker:
                     sent_result = client().depParser(''.join(words_bag))
                     items = sent_result['items']
                 except KeyError:
-                    sleep(0.5)
-                    print('等待句法QPS，延时0.5秒...')
+                    sleep(0.6)
+                    print('等待句法QPS，延时0.6秒...')
                     try:
                         sent_result = client().depParser(''.join(words_bag))
                         items = sent_result['items']
@@ -534,7 +542,10 @@ class Talker:
                     if dis > 0.7:
                         for i in range(1, id_ + 1):
                             disconnected[i] = True
-                average_disc = round(sum(discontinuity.values())/len(discontinuity), 2)
+                try:
+                    average_disc = round(sum(discontinuity.values())/len(discontinuity), 2)
+                except ZeroDivisionError:  # 这里偶尔会报一个错，因为会把一个习语按照一个词来分词
+                    average_disc = 0.5  # ?
 
             # 模拟从句首开始构建
             max_chrc = 3
@@ -576,7 +587,6 @@ class Talker:
         for i_marks, id_ in enumerate(parse_marks_d):
             mark = parse_marks_d[id_]
             if mark[0] == mark[1]:
-
                 py = py_output_d[id_]
                 if isinstance(py, tuple):
                     if py[0] in '\n\r':
@@ -587,14 +597,21 @@ class Talker:
                         insert_l.append(((1, 1), (None, None, False)))
                     else:
                         insert_l.append(((1, 1), (None, None, False)))
+                    if mark[1] > 1:  # 修bug：一个符号被分词成了一个词的结尾;方法：把[:-1]范围内的所有字符加入bag
+                        last_chr_id = list(parse_marks_d.keys())[i_marks-1]
+                        for n in range(mark[1]-1):
+                            sub_mark_id = list(parse_marks_d.keys())[i_marks-mark[1]+1+n]
+                            sub_mark = parse_marks_d[sub_mark_id]
+                            bag.append((sub_mark[1], sub_mark[3], last_chr_id))
                     bags.append(bag)
                     bag = []
+
                 else:
                     bag.append((mark[1], mark[3], id_))  # 词长，词id，末位字id
-                if i_marks == end_marks:
-                    insert_l.append(None)
-                    bags.append(bag)
-                    bag = []
+                    if i_marks == end_marks:  # 文末标记+一般bag间标记可能共存，导致bag末尾有两个insert
+                        insert_l.append(None)
+                        bags.append(bag)
+                        bag = []
         for i, bag in enumerate(bags):
             result = to_marks(bag)
             insert = [insert_l[i]]
@@ -603,6 +620,7 @@ class Talker:
             final = result + insert
             for tempo in final:
                 proso_marks.append(tempo)
+
         proso_marks_d = OrderedDict([(key, proso_marks[i]) for i, key in enumerate(parse_marks_d)])
 
         # # 计算重要性
@@ -656,8 +674,10 @@ class Talker:
         chr_tempos = []
         for i, mark in enumerate(self.mark_list):
             proso_mark = mark['proso']
+            print(1, mark)
             if proso_mark[0][0] == proso_mark[0][1]:
                 unit_i_lists.append([x for x in range(i-proso_mark[0][1]+1, i+1)])
+                print(mark)
         for unit_i_list in unit_i_lists:
             word_list = []
             for i in unit_i_list:
@@ -698,6 +718,7 @@ class Talker:
                     tempo_c = (1 / (1 + math.exp(-(tempo_c-t_center)*extreme / t_range)))*t_range + tempo_range[0] # sigmoid
                     chr_tempos_u.append(tempo_c)
             chr_tempos = chr_tempos + chr_tempos_u
+        print(len(chr_tempos), chr_tempos)
         for i, chr_tempo in enumerate(chr_tempos):
             mark = self.mark_list[i]
             py = mark['py']
@@ -709,7 +730,7 @@ class Talker:
                 elif py[1] in '，,;；…—':
                     length = standard_length*1.5
                 else:
-                    length = standard_length*1
+                    length = standard_length*0.5
             else:
                 length = standard_length * chr_tempo
                 if py[1] == '0':
@@ -738,7 +759,7 @@ class Talker:
         # 从固定值的点，变成核心调形。
         # 默认调是基调：0
         tone0 = [(0, 0), (1, -0.5)]
-        tone1 = [(0, 0.8), (1, 0.8)]
+        tone1 = [(0, 0.6), (1, 0.6)]
         tone2 = [(0, -0.6), (1, 0.6)]
         tone3 = [(0, -0.6), (0.5, -1.2), (1, -0.6)]
         tone4 = [(0, 1), (1, -1)]
@@ -950,11 +971,11 @@ class Talker:
             except IndexError:
                 i_points_start = [(0, 1)]  # 响度，0~1
             if mark['py'][1] == '0':
-                i_points = i_points_start + [(0.3, 0.8)]
+                i_points = i_points_start + [(0.2, 0.4), (0.7, 0.4), (1, 0.8)]
             elif mark['py'][2]:
-                i_points = i_points_start + [(0.3, 1), (0.75, 0.7), (1, 0)]
+                i_points = i_points_start + [(0.3, 1), (0.75, 0.7), (1, 0.2)]
             else:
-                i_points = i_points_start + [(0.3 ,1)]
+                i_points = i_points_start + [(0.1 ,1)]
             if len(i_points)>1:
                 intns_list = []
                 for ind, point in enumerate(i_points[:-1]):
@@ -978,8 +999,8 @@ class Talker:
         note_list = self.note_list[:]
         pre = 5000
         total_time = self.total_time + 100 + pre
-        f0_level = 60
-        pbs = 16
+        f0_level = 63
+        pbs = 13
 
         # 牺牲性能，生成接口：（拼音，起始时间，时长，pit坐标序列(其实是独立的），响度坐标序列（独立））
         # 土法炼成xml
@@ -1008,21 +1029,28 @@ class Talker:
                 print('关键循环完成度：', int(percent*100), '%')
                 to_print.remove(percent)
         last_ph = ''
-        for note in note_list:
+        for i, note in enumerate(note_list):
+            try:
+                next_py = note_list[i+1][0][0]
+            except IndexError:
+                next_py = ''
             py = note[0][0]
             er_ph = ''
+            nasal_ph = ''
             if py == 'yo':
                 py = 'you'
             if py == 'eng' or note[0] == 'n':
                 py = 'en'
             vel = 64
-            if py[0] in 'ptkbdg':
+            if py[0] in 'bdg':
                 vel = 115
             if last_ph:
                 if last_ph[-2:] == '@`':
                     vel = 110
-            if py[0] in 'q':
+            if py[:2] in ('sh', 'ch') or py[0] in ('q', 'x', 's', 't', 'k','p'):
                 vel = 40
+            if py[-1] == 'g' and note[2] < 200 and next_py[:1] not in ('aoeyw'):
+                nasal_ph = ' n'
             if note[0][1]:
                 er_ph = ' @`'
             try:
@@ -1050,7 +1078,7 @@ class Talker:
 \t\t\t\t\t<v id="vibLen">0</v>
 \t\t\t\t\t<v id="vibType">0</v>
 \t\t\t\t</nStyle>
-\t\t\t</note>""".format(start=note[1] + pre, dur=note[2], f0=f0_level, py=py, ph=dict_ph+er_ph, vel=vel)
+\t\t\t</note>""".format(start=note[1] + pre, dur=note[2], f0=f0_level, py=py, ph=dict_ph+er_ph+nasal_ph, vel=vel)
 
         address = addr
         text_head = """<?xml version="1.0" encoding="UTF-8" standalone="no"?>
@@ -1167,13 +1195,13 @@ class Talker:
 
 
 if __name__ == '__main__':
-    t = Talker(online=False)
+    t = Talker(online=True)
     while True:
         i = input('洛天依说：')
         cmd = 'type'
         if i == '':
             cmd = 'read'
         t.load(cmd, i)
-        t.to_vsqx(start=False)
+        t.to_vsqx(start=True)
         for mark in t.mark_list:
             print(mark)
