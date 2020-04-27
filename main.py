@@ -4,7 +4,7 @@
     更新了拼音改变的规则（得）
     修改了一些参数的值
     调整了等待qps的时间
-    bugs:
+    修复bugs:
         末尾有空字符导致baidu parser输出错误
         分词错误将符号分到别的词最后，混淆了节奏的短语识别系统（二次修复）
 
@@ -674,10 +674,8 @@ class Talker:
         chr_tempos = []
         for i, mark in enumerate(self.mark_list):
             proso_mark = mark['proso']
-            print(1, mark)
             if proso_mark[0][0] == proso_mark[0][1]:
                 unit_i_lists.append([x for x in range(i-proso_mark[0][1]+1, i+1)])
-                print(mark)
         for unit_i_list in unit_i_lists:
             word_list = []
             for i in unit_i_list:
@@ -718,7 +716,6 @@ class Talker:
                     tempo_c = (1 / (1 + math.exp(-(tempo_c-t_center)*extreme / t_range)))*t_range + tempo_range[0] # sigmoid
                     chr_tempos_u.append(tempo_c)
             chr_tempos = chr_tempos + chr_tempos_u
-        print(len(chr_tempos), chr_tempos)
         for i, chr_tempo in enumerate(chr_tempos):
             mark = self.mark_list[i]
             py = mark['py']
@@ -1049,7 +1046,7 @@ class Talker:
                     vel = 110
             if py[:2] in ('sh', 'ch') or py[0] in ('q', 'x', 's', 't', 'k','p'):
                 vel = 40
-            if py[-1] == 'g' and note[2] < 200 and next_py[:1] not in ('aoeyw'):
+            if False and py[-1] == 'g' and note[2] < 200 and next_py[:1] not in ('aoeyw'):  #效果不好暂时取消
                 nasal_ph = ' n'
             if note[0][1]:
                 er_ph = ' @`'
