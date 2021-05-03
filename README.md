@@ -12,3 +12,8 @@ Convert Chinese Mandarin texts to vsqx files for Vocaloid, automatically predict
 如您所见，本软件还预置了基于句法结构的停顿预测功能，但效果并不稳定。在完成上面的操作之后，这一功能也会打开。
 
 本项目（TyTalk）是专用于vsqx文件生成的，其核心代码也可以用于通用的韵律预测。这一通用的预测功能属于其父项目AutoTalk（暂未发布）。
+# Version 版本
+此项目中的版本为0.6版本
+
+# Latest Version 最近版本
+由于近期版本有大量杂乱的GUI与执行逻辑混杂的代码，所以暂不公开，待整理完成后进行。
