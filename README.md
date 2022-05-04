@@ -16,4 +16,4 @@ Convert Chinese Mandarin texts to vsqx files for Vocaloid, automatically predict
 此项目中的版本为0.6版本
 
 # Latest Version 最近版本
-由于近期版本有大量杂乱的GUI与执行逻辑混杂的代码，所以暂不公开，待整理完成后进行。
+TyTalk已被整合进入[VvTalk](https://github.com/GalaxieT/VvTalk)项目中。
