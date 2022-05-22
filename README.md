@@ -1,3 +1,7 @@
+
+# Latest Version 最近版本
+TyTalk已被整合进入[VvTalk](https://github.com/GalaxieT/VvTalk)项目中。
+
 # TyTalk
 Convert Chinese Mandarin texts to vsqx files for Vocaloid, automatically predicting the prosody.
 依据普通话文本合成vsqx文件，自动进行韵律（时长、语调）预测。
@@ -15,5 +19,3 @@ Convert Chinese Mandarin texts to vsqx files for Vocaloid, automatically predict
 # Version 版本
 此项目中的版本为0.6版本
 
-# Latest Version 最近版本
-TyTalk已被整合进入[VvTalk](https://github.com/GalaxieT/VvTalk)项目中。
